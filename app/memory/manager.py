@@ -42,3 +42,16 @@ class MemoryManager:
 
     def get_memories(self):
         return self.memories
+
+    def get_memory_contents(self):
+        contents = []
+
+        for memory in self.memories:
+            if isinstance(memory, str):
+                contents.append(memory)
+            elif isinstance(memory, dict):
+                contents.append(memory.get("content", ""))
+            elif hasattr(memory, "content"):
+                contents.append(memory.content)
+
+        return contents

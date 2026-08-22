@@ -1,11 +1,15 @@
 from app.llm.client import LLMClient
 from app.memory.manager import MemoryManager
+from app.memory.extractor import MemoryExtractor
 
 
 class Jarvis:
+    IMPORTANCE_THRESHOLD = 0.7
+
     def __init__(self):
         self.llm = LLMClient()
         self.memory = MemoryManager()
+        self.extractor = MemoryExtractor()
 
         self.system_prompt = """
 You are JARVIS-X, a personal AI assistant.
@@ -53,10 +57,18 @@ has actually been implemented and provided to you by the application.
             memory = user_input[9:].strip()
 
             if memory:
-                self.memory.add_memory(memory)
+                extracted_memory = self.extractor.extract(memory)
+
+                if extracted_memory:
+                    self.memory.add_memory(extracted_memory)
+                else:
+                    self.memory.add_memory(memory)
+
                 return "I will remember that."
 
-        memories = self.memory.get_memories()
+        self._extract_memory(user_input)
+
+        memories = self.memory.get_memory_contents()
 
         memory_text = ""
 
@@ -93,3 +105,9 @@ has actually been implemented and provided to you by the application.
         })
 
         return response
+
+    def _extract_memory(self, user_input):
+        memory = self.extractor.extract(user_input)
+
+        if memory and memory.importance >= self.IMPORTANCE_THRESHOLD:
+            self.memory.add_memory(memory)
