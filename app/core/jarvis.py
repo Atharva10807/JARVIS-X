@@ -1,15 +1,14 @@
+import re
+
 from app.llm.client import LLMClient
 from app.memory.manager import MemoryManager
-from app.memory.extractor import MemoryExtractor
 
 
 class Jarvis:
-    IMPORTANCE_THRESHOLD = 0.7
 
     def __init__(self):
         self.llm = LLMClient()
         self.memory = MemoryManager()
-        self.extractor = MemoryExtractor()
 
         self.system_prompt = """
 You are JARVIS-X, a personal AI assistant.
@@ -49,26 +48,89 @@ has actually been implemented and provided to you by the application.
 
         self.conversation = []
 
+    def _save_memory(self, content, category, importance):
+        memories = self.memory.get_memories()
+
+        for memory in memories:
+            if isinstance(memory, dict):
+                if memory.get("content", "").lower() == content.lower():
+                    return False
+
+        self.memory.add_memory({
+            "content": content,
+            "category": category,
+            "importance": importance
+        })
+
+        return True
+
+    def _extract_memory(self, user_input):
+        text = user_input.strip()
+
+        project_match = re.search(
+            r"\bmy project is(?: called)?\s+(.+?)[.!?]?$",
+            text,
+            re.IGNORECASE
+        )
+
+        if project_match:
+            project_name = project_match.group(1).strip()
+
+            content = f"My project is {project_name}."
+
+            self._save_memory(
+                content,
+                "project",
+                0.95
+            )
+
+            return content
+
+        preference_match = re.search(
+            r"\bi prefer\s+(.+?)[.!?]?$",
+            text,
+            re.IGNORECASE
+        )
+
+        if preference_match:
+            preference = preference_match.group(1).strip()
+
+            content = f"I prefer {preference}."
+
+            self._save_memory(
+                content,
+                "preference",
+                0.85
+            )
+
+            return content
+
+        return None
+
     def respond(self, user_input):
+
         if not user_input.strip():
             return "Please provide something for me to work with."
+
+        user_input = user_input.strip()
+
+        if user_input.lower() == "exit":
+            return "Shutting down. Goodbye."
 
         if user_input.lower().startswith("remember "):
             memory = user_input[9:].strip()
 
             if memory:
-                extracted_memory = self.extractor.extract(memory)
+                self._save_memory(
+                    memory,
+                    "general",
+                    0.80
+                )
 
-                if extracted_memory:
-                    self.memory.add_memory(extracted_memory)
-                else:
-                    self.memory.add_memory(memory)
+        else:
+            self._extract_memory(user_input)
 
-                return "I will remember that."
-
-        self._extract_memory(user_input)
-
-        memories = self.memory.get_memory_contents()
+        memories = self.memory.get_memories()
 
         memory_text = ""
 
@@ -76,7 +138,13 @@ has actually been implemented and provided to you by the application.
             memory_text = "\nKnown user information:\n"
 
             for memory in memories:
-                memory_text += f"- {memory}\n"
+                if isinstance(memory, dict):
+                    content = memory.get("content", "")
+                    category = memory.get("category", "general")
+
+                    memory_text += f"- {content} [{category}]\n"
+                else:
+                    memory_text += f"- {memory}\n"
 
         messages = [
             {
@@ -105,9 +173,3 @@ has actually been implemented and provided to you by the application.
         })
 
         return response
-
-    def _extract_memory(self, user_input):
-        memory = self.extractor.extract(user_input)
-
-        if memory and memory.importance >= self.IMPORTANCE_THRESHOLD:
-            self.memory.add_memory(memory)
