@@ -10,19 +10,44 @@ class LLMClient:
     def __init__(self):
         load_dotenv()
 
+        self.provider = os.getenv("LLM_PROVIDER", "groq").lower()
+
+        if self.provider == "groq":
+            self._setup_groq()
+        else:
+            raise ValueError(
+                f"Unsupported LLM provider: {self.provider}"
+            )
+
+    def _setup_groq(self):
         api_key = os.getenv("GROQ_API_KEY")
 
         if not api_key:
-            raise ValueError("GROQ_API_KEY was not found in .env")
+            raise ValueError(
+                "GROQ_API_KEY was not found in .env"
+            )
 
         self.client = Groq(
             api_key=api_key,
             timeout=30.0
         )
 
-        self.model = "openai/gpt-oss-20b"
+        self.model = os.getenv(
+            "GROQ_MODEL",
+            "openai/gpt-oss-20b"
+        )
 
     def generate_response(self, messages):
+
+        if self.provider == "groq":
+            return self._generate_groq_response(messages)
+
+        raise ValueError(
+            f"Unsupported LLM provider: {self.provider}"
+        )
+
+    def _generate_groq_response(self, messages):
+
         for attempt in range(2):
             try:
                 response = self.client.chat.completions.create(
@@ -34,8 +59,8 @@ class LLMClient:
 
                 return response.choices[0].message.content
 
-            except Exception as error:
+            except Exception:
                 if attempt == 1:
-                    raise error
+                    raise
 
                 time.sleep(1)
