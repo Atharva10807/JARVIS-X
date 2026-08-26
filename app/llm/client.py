@@ -3,7 +3,6 @@ import os
 from dotenv import load_dotenv
 
 from app.llm.providers.groq_provider import GroqProvider
-from app.llm.providers.omniroute_provider import OmniRouteProvider
 
 
 class LLMClient:
@@ -23,8 +22,6 @@ class LLMClient:
         if self.provider_name == "groq":
             return GroqProvider()
 
-        if self.provider_name == "omniroute":
-            return OmniRouteProvider()
 
         raise ValueError(
             f"Unsupported LLM provider: {self.provider_name}"
