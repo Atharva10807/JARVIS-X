@@ -28,7 +28,9 @@ Behavior rules:
 7. Protect user privacy and sensitive information.
 8. Ask for confirmation before sensitive actions.
 9. Maintain context throughout the current conversation.
-10. Use available long-term memory when it is relevant.
+10. Use relevant long-term memory when it helps answer the user's request.
+11. Do not mention memories unless they are relevant to the response.
+12. Do not claim knowledge that is not present in the conversation or memory.
 
 You are currently operating in the text-only development version
 of JARVIS-X.
@@ -53,7 +55,9 @@ has actually been implemented and provided to you by the application.
 
         for memory in memories:
             if isinstance(memory, dict):
-                if memory.get("content", "").lower() == content.lower():
+                existing_content = memory.get("content", "")
+
+                if existing_content.lower() == content.lower():
                     return False
 
         self.memory.add_memory({
@@ -107,6 +111,47 @@ has actually been implemented and provided to you by the application.
 
         return None
 
+    def _handle_remember_command(self, user_input):
+        """
+        Convert 'Remember that ...' into a clean memory.
+        """
+
+        memory = re.sub(
+            r"^remember\s+(that\s+)?",
+            "",
+            user_input.strip(),
+            flags=re.IGNORECASE
+        ).strip()
+
+        if not memory:
+            return None
+
+        memory = memory.rstrip(".!?")
+
+        category = "general"
+        importance = 0.80
+
+        if re.search(
+            r"\b(project|working on|building|developing)\b",
+            memory,
+            re.IGNORECASE
+        ):
+            category = "project"
+            importance = 0.95
+
+        content = memory[0].upper() + memory[1:] + "."
+
+        self._save_memory(
+            content,
+            category,
+            importance
+        )
+
+        return content
+
+    def _get_relevant_memories(self, user_input):
+        return self.memory.search_memories(user_input)
+
     def respond(self, user_input):
 
         if not user_input.strip():
@@ -118,26 +163,19 @@ has actually been implemented and provided to you by the application.
             return "Shutting down. Goodbye."
 
         if user_input.lower().startswith("remember "):
-            memory = user_input[9:].strip()
-
-            if memory:
-                self._save_memory(
-                    memory,
-                    "general",
-                    0.80
-                )
+            self._handle_remember_command(user_input)
 
         else:
             self._extract_memory(user_input)
 
-        memories = self.memory.get_memories()
+        relevant_memories = self._get_relevant_memories(user_input)
 
         memory_text = ""
 
-        if memories:
-            memory_text = "\nKnown user information:\n"
+        if relevant_memories:
+            memory_text = "\nRelevant long-term memory:\n"
 
-            for memory in memories:
+            for memory in relevant_memories:
                 if isinstance(memory, dict):
                     content = memory.get("content", "")
                     category = memory.get("category", "general")

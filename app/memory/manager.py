@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from dataclasses import asdict, is_dataclass
 
 
@@ -55,3 +56,39 @@ class MemoryManager:
                 contents.append(memory.content)
 
         return contents
+
+    def search_memories(self, query):
+        """
+        Return memories that are relevant to the supplied query.
+        Uses simple keyword matching for the current development version.
+        """
+
+        query_words = set(
+            re.findall(r"\b[a-zA-Z0-9_-]+\b", query.lower())
+        )
+
+        if not query_words:
+            return []
+
+        matches = []
+
+        for memory in self.memories:
+            if isinstance(memory, dict):
+                content = memory.get("content", "")
+                category = memory.get("category", "general")
+            else:
+                content = str(memory)
+                category = "general"
+
+            memory_words = set(
+                re.findall(r"\b[a-zA-Z0-9_-]+\b", content.lower())
+            )
+
+            score = len(query_words & memory_words)
+
+            if score > 0:
+                matches.append((score, memory))
+
+        matches.sort(key=lambda item: item[0], reverse=True)
+
+        return [memory for _, memory in matches]
