@@ -10,6 +10,9 @@ class Jarvis:
     def __init__(self):
         self.llm = LLMClient()
         self.memory = MemoryManager()
+
+        self.conversation = []
+        self.max_conversation_messages = 20
         self.pending_memory_clear = False
 
         self.system_prompt = """
@@ -50,14 +53,17 @@ Only claim to have access to a capability when that capability
 has actually been implemented and provided to you by the application.
 """
 
-        self.conversation = []
-
     def _save_memory(self, content, category, importance):
-        memories = self.memory.get_memories()
+        content = content.strip()
 
-        for memory in memories:
+        if not content:
+            return False
+
+        for memory in self.memory.get_memories():
             if isinstance(memory, dict):
-                existing_content = memory.get("content", "")
+                existing_content = str(
+                    memory.get("content", "")
+                ).strip()
 
                 if existing_content.casefold() == content.casefold():
                     return False
@@ -71,62 +77,102 @@ has actually been implemented and provided to you by the application.
     def _extract_memory(self, user_input):
         text = user_input.strip()
 
-        project_match = re.search(
-            r"\bmy project is(?: called)?\s+(.+?)[.!?]?$",
-            text,
-            re.IGNORECASE
-        )
+        patterns = [
+            (
+                r"\bmy project is(?: called)?\s+(.+?)[.!?]?$",
+                "project",
+                0.95,
+                "My project is {}."
+            ),
+            (
+                r"\bmy favourite programming language is\s+(.+?)[.!?]?$",
+                "preference",
+                0.85,
+                "My favourite programming language is {}."
+            ),
+            (
+                r"\bmy favorite programming language is\s+(.+?)[.!?]?$",
+                "preference",
+                0.85,
+                "My favorite programming language is {}."
+            ),
+            (
+                r"\bi study at\s+(.+?)[.!?]?$",
+                "education",
+                0.85,
+                "I study at {}."
+            ),
+            (
+                r"\bi prefer\s+(.+?)[.!?]?$",
+                "preference",
+                0.85,
+                "I prefer {}."
+            ),
+        ]
 
-        if project_match:
-            project_name = project_match.group(1).strip()
+        for pattern, category, importance, template in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
 
-            content = f"My project is {project_name}."
+            if match:
+                value = match.group(1).strip().rstrip(".!?")
 
-            self._save_memory(content, "project", 0.95)
-            return content
+                if not value:
+                    return None
 
-        preference_match = re.search(
-            r"\bi prefer\s+(.+?)[.!?]?$",
-            text,
-            re.IGNORECASE
-        )
+                content = template.format(value)
 
-        if preference_match:
-            preference = preference_match.group(1).strip()
+                self._save_memory(
+                    content,
+                    category,
+                    importance
+               )
 
-            content = f"I prefer {preference}."
-
-            self._save_memory(content, "preference", 0.85)
-            return content
+                return content
 
         return None
 
     def _handle_remember_command(self, user_input):
-        memory = re.sub(
+        memory_text = re.sub(
             r"^remember\s+(that\s+)?",
             "",
             user_input.strip(),
             flags=re.IGNORECASE
         ).strip()
 
-        if not memory:
+        if not memory_text:
             return None
 
-        memory = memory.rstrip(".!?")
+        memory_text = memory_text.rstrip(".!?")
+
+        if not memory_text:
+            return None
+
+        content = memory_text[0].upper() + memory_text[1:] + "."
 
         category = "general"
         importance = 0.80
 
         if re.search(
-            r"\b(project|working on|building|developing)\b",
-            memory,
+            r"\b(my project|project is|working on|building|developing)\b",
+            memory_text,
             re.IGNORECASE
         ):
             category = "project"
             importance = 0.95
 
-        content = memory[0].upper() + memory[1:] + "."
-        self._save_memory(content, category, importance)
+        elif re.search(
+            r"\b(i prefer|my preference|i like|i dislike|i hate)\b",
+            memory_text,
+            re.IGNORECASE
+        ):
+            category = "preference"
+            importance = 0.85
+
+        self._save_memory(
+            content,
+            category,
+            importance
+        )
 
         return content
 
@@ -163,9 +209,13 @@ has actually been implemented and provided to you by the application.
             index = int(number_text) - 1
 
             if not self.memory.delete_memory(index):
-                return "Invalid memory number. Use 'memory list' to see valid numbers."
+                return (
+                    "Invalid memory number. "
+                    "Use 'memory list' to see valid numbers."
+                )
 
             self.pending_memory_clear = False
+
             return f"Memory {index + 1} deleted successfully."
 
         if command == "memory clear":
@@ -173,9 +223,11 @@ has actually been implemented and provided to you by the application.
                 return "There are no memories to clear."
 
             self.pending_memory_clear = True
+
             return (
-                f"This will permanently delete all {len(memories)} saved memories. "
-                "Type 'confirm clear' to proceed or 'cancel clear' to cancel."
+                f"This will permanently delete all {len(memories)} "
+                "saved memories. Type 'confirm clear' to proceed "
+                "or 'cancel clear' to cancel."
             )
 
         return None
@@ -197,10 +249,12 @@ has actually been implemented and provided to you by the application.
             if command == "confirm clear":
                 self.memory.clear_memories()
                 self.pending_memory_clear = False
+
                 return "All saved memories have been deleted."
 
             if command == "cancel clear":
                 self.pending_memory_clear = False
+
                 return "Memory clearing cancelled."
 
             self.pending_memory_clear = False
@@ -227,6 +281,7 @@ has actually been implemented and provided to you by the application.
                 if isinstance(memory, dict):
                     content = memory.get("content", "")
                     category = memory.get("category", "general")
+
                     memory_text += f"- {content} [{category}]\n"
                 else:
                     memory_text += f"- {memory}\n"
@@ -256,5 +311,10 @@ has actually been implemented and provided to you by the application.
             "role": "assistant",
             "content": response
         })
+
+        if len(self.conversation) > self.max_conversation_messages:
+            self.conversation = self.conversation[
+                -self.max_conversation_messages:
+            ]
 
         return response
