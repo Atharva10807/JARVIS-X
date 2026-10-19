@@ -89,27 +89,56 @@ Your available capabilities are limited to the functions provided
 by the current JARVIS-X application. Do not pretend to execute
 unavailable tools or perform actions outside those capabilities.
 """
-
     def _save_memory(self, content, category, importance):
         content = content.strip()
 
         if not content:
             return False
 
-        for memory in self.memory.get_memories():
-            if isinstance(memory, dict):
-                existing_content = str(
-                    memory.get("content", "")
-                ).strip()
-
-                if existing_content.casefold() == content.casefold():
-                    return False
-
-        return self.memory.add_memory({
+        new_memory = {
             "content": content,
             "category": category,
             "importance": importance
-        })
+        }
+
+        patterns = [
+            r"my favourite programming language is ",
+            r"my favorite programming language is ",
+            r"i study at ",
+            r"i prefer ",
+            r"my project is "
+        ]
+
+        for index, memory in enumerate(self.memory.get_memories()):
+            if not isinstance(memory, dict):
+                continue
+
+            existing_content = str(
+                memory.get("content", "")
+            ).strip()
+
+            if existing_content.casefold() == content.casefold():
+                return False
+
+            if memory.get("category") != category:
+                continue
+
+            old_normalized = existing_content.casefold()
+            new_normalized = content.casefold()
+
+            for pattern in patterns:
+                old_prefix = re.match(pattern, old_normalized)
+                new_prefix = re.match(pattern, new_normalized)
+
+                if old_prefix and new_prefix:
+                    if old_prefix.group() == new_prefix.group():
+                        return self.memory.update_memory(
+                            index,
+                            new_memory
+                        )
+
+        return self.memory.add_memory(new_memory)
+
 
     def _extract_memory(self, user_input):
         text = user_input.strip()

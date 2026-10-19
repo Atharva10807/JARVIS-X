@@ -166,6 +166,23 @@ class MemoryManager:
             memory for _, memory in matches[:limit]
         ]
 
+    def update_memory(self, index, updated_memory):
+        if index < 0 or index >= len(self.memories):
+            return False
+
+        if not isinstance(updated_memory, dict):
+            return False
+
+        content = str(updated_memory.get("content", "")).strip()
+
+        if not content:
+            return False
+
+        updated_memory["content"] = content
+        self.memories[index] = updated_memory
+        self.save_memories()
+
+        return True
     def delete_memory(self, index):
         if index < 0 or index >= len(self.memories):
             return False
