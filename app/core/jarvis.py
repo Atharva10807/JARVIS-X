@@ -102,11 +102,12 @@ unavailable tools or perform actions outside those capabilities.
         }
 
         patterns = [
-            r"my favourite programming language is ",
-            r"my favorite programming language is ",
+            r"my favou?rite programming language is ",
             r"i study at ",
             r"i prefer ",
-            r"my project is "
+            r"my project is ",
+            r"i live in ",
+            r"my favou?rite editor is "
         ]
 
         for index, memory in enumerate(self.memory.get_memories()):
@@ -131,11 +132,10 @@ unavailable tools or perform actions outside those capabilities.
                 new_prefix = re.match(pattern, new_normalized)
 
                 if old_prefix and new_prefix:
-                    if old_prefix.group() == new_prefix.group():
-                        return self.memory.update_memory(
-                            index,
-                            new_memory
-                        )
+                    return self.memory.update_memory(
+                        index,
+                        new_memory
+                    )
 
         return self.memory.add_memory(new_memory)
 
@@ -173,6 +173,18 @@ unavailable tools or perform actions outside those capabilities.
                 "preference",
                 0.85,
                 "I prefer {}."
+            ),
+            (
+                r"\bi live in\s+(.+?)[.!?]?$",
+                "location",
+                0.85,
+                "I live in {}."
+            ),
+            (
+                r"\bmy favou?rite editor is\s+(.+?)[.!?]?$",
+                "development_tools",
+                0.85,
+                "My favourite editor is {}."
             ),
         ]
 
