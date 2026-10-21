@@ -89,8 +89,17 @@ Your available capabilities are limited to the functions provided
 by the current JARVIS-X application. Do not pretend to execute
 unavailable tools or perform actions outside those capabilities.
 """
-    def _save_memory(self, content, category, importance):
+
+    def _save_memory(
+        self,
+        content,
+        category,
+        importance,
+        key="",
+        value=""
+    ):
         content = content.strip()
+        value = value.strip()
 
         if not content:
             return False
@@ -98,19 +107,43 @@ unavailable tools or perform actions outside those capabilities.
         new_memory = {
             "content": content,
             "category": category,
-            "importance": importance
+            "importance": importance,
+            "key": key,
+            "value": value
         }
 
-        patterns = [
-            r"my favou?rite programming language is ",
-            r"i study at ",
-            r"i prefer ",
-            r"my project is ",
-            r"i live in ",
-            r"my favou?rite editor is "
-        ]
+        memories = self.memory.get_memories()
 
-        for index, memory in enumerate(self.memory.get_memories()):
+        legacy_patterns = {
+            "project": r"^(?:my project is(?: called)?|i am working on)\s+(.+?)[.!?]?$",
+            "programming_language": r"^my favou?rite programming language is\s+(.+?)[.!?]?$",
+            "education": r"^i study at\s+(.+?)[.!?]?$",
+            "preference": r"^i prefer\s+(.+?)[.!?]?$",
+            "location": r"^i live in\s+(.+?)[.!?]?$",
+            "editor": r"^my favou?rite editor is\s+(.+?)[.!?]?$"
+        }
+
+        # First, update a record that already has this structured key.
+        if key and value:
+            index = self.memory.find_memory_by_key(key)
+
+            if index is not None:
+                existing = memories[index]
+
+                if (
+                    isinstance(existing, dict)
+                    and str(existing.get("value", "")).strip().casefold()
+                    == value.casefold()
+                ):
+                    return False
+
+                return self.memory.update_memory_by_key(
+                    key,
+                    new_memory
+                )
+
+        # Next, look for an existing record in the same fact category.
+        for index, memory in enumerate(memories):
             if not isinstance(memory, dict):
                 continue
 
@@ -119,25 +152,40 @@ unavailable tools or perform actions outside those capabilities.
             ).strip()
 
             if existing_content.casefold() == content.casefold():
+                if key and value and not memory.get("key"):
+                    new_memory["key"] = key
+                    return self.memory.update_memory(index, new_memory)
+
                 return False
 
             if memory.get("category") != category:
                 continue
 
-            old_normalized = existing_content.casefold()
-            new_normalized = content.casefold()
+            existing_key = memory.get("key", "")
 
-            for pattern in patterns:
-                old_prefix = re.match(pattern, old_normalized)
-                new_prefix = re.match(pattern, new_normalized)
+            if existing_key and existing_key != key:
+                continue
 
-                if old_prefix and new_prefix:
-                    return self.memory.update_memory(
-                        index,
-                        new_memory
-                    )
+            # Migrate a legacy record only when its fact key and value match.
+            if key and not existing_key and value:
+                legacy_pattern = legacy_patterns.get(key)
+
+                old_match = (
+                    re.fullmatch(legacy_pattern, existing_content, re.IGNORECASE)
+                    if legacy_pattern
+                    else None
+                )
+
+                if (
+                    old_match
+                    and old_match.group(1).strip().casefold()
+                    == value.casefold()
+                ):
+                    new_memory["key"] = key
+                    return self.memory.update_memory(index, new_memory)
 
         return self.memory.add_memory(new_memory)
+
 
 
     def _extract_memory(self, user_input):
@@ -148,47 +196,47 @@ unavailable tools or perform actions outside those capabilities.
                 r"\bmy project is(?: called)?\s+(.+?)[.!?]?$",
                 "project",
                 0.95,
-                "My project is {}."
+                "My project is {}.",
+                "project"
             ),
             (
-                r"\bmy favourite programming language is\s+(.+?)[.!?]?$",
+                r"\bmy favou?rite programming language is\s+(.+?)[.!?]?$",
                 "preference",
                 0.85,
-                "My favourite programming language is {}."
-            ),
-            (
-                r"\bmy favorite programming language is\s+(.+?)[.!?]?$",
-                "preference",
-                0.85,
-                "My favorite programming language is {}."
+                "My favourite programming language is {}.",
+                "programming_language"
             ),
             (
                 r"\bi study at\s+(.+?)[.!?]?$",
                 "education",
                 0.85,
-                "I study at {}."
+                "I study at {}.",
+                "education"
             ),
             (
                 r"\bi prefer\s+(.+?)[.!?]?$",
                 "preference",
                 0.85,
-                "I prefer {}."
+                "I prefer {}.",
+                "preference"
             ),
             (
                 r"\bi live in\s+(.+?)[.!?]?$",
                 "location",
                 0.85,
-                "I live in {}."
+                "I live in {}.",
+                "location"
             ),
             (
                 r"\bmy favou?rite editor is\s+(.+?)[.!?]?$",
                 "development_tools",
                 0.85,
-                "My favourite editor is {}."
+                "My favourite editor is {}.",
+                "editor"
             ),
         ]
 
-        for pattern, category, importance, template in patterns:
+        for pattern, category, importance, template, key in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
 
             if match:
@@ -202,7 +250,9 @@ unavailable tools or perform actions outside those capabilities.
                 self._save_memory(
                     content,
                     category,
-                    importance
+                    importance,
+                    key=key,
+                    value=value
                 )
 
                 return content

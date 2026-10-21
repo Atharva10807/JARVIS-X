@@ -6,3 +6,5 @@ class Memory:
     content: str
     category: str
     importance: float
+    key: str = ""
+    value: str = ""

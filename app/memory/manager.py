@@ -83,6 +83,12 @@ class MemoryManager:
     def get_memories(self):
         return self.memories
 
+    def get_memory_field(self, memory, field, default=None):
+        if isinstance(memory, dict):
+            return memory.get(field, default)
+
+        return getattr(memory, field, default)
+
     def get_memory_contents(self):
         contents = []
 
@@ -98,7 +104,22 @@ class MemoryManager:
 
         return contents
 
-    
+    def find_memory_by_key(self, key):
+        if not key:
+            return None
+
+        for index, memory in enumerate(self.memories):
+            existing_key = self.get_memory_field(
+                memory,
+                "key",
+                ""
+            )
+
+            if existing_key == key:
+                return index
+
+        return None
+
     def _get_keywords(self, text):
         words = re.findall(
             r"[a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]+)*",
@@ -165,6 +186,36 @@ class MemoryManager:
         return [
             memory for _, memory in matches[:limit]
         ]
+
+    def update_memory_by_key(self, key, updated_memory):
+        index = self.find_memory_by_key(key)
+
+        if index is None:
+            return False
+
+        if not isinstance(updated_memory, dict):
+            return False
+
+        updated_memory["key"] = key
+
+        content = str(
+            updated_memory.get("content", "")
+        ).strip()
+
+        value = str(
+            updated_memory.get("value", "")
+        ).strip()
+
+        if not content or not value:
+            return False
+
+        updated_memory["content"] = content
+        updated_memory["value"] = value
+
+        self.memories[index] = updated_memory
+        self.save_memories()
+
+        return True
 
     def update_memory(self, index, updated_memory):
         if index < 0 or index >= len(self.memories):
